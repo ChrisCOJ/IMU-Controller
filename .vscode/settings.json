@@ -1,0 +1,11 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPath": "/Users/chris/esp/v5.4/esp-idf",
+    "idf.pythonInstallPath": "/opt/homebrew/opt/python@3.9/libexec/bin/python",
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+    ],
+    "idf.port": "/dev/tty.usbserial-0001",
+    "idf.toolsPath": "/Users/chris/.espressif"
+}
