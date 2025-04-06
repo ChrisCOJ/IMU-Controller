@@ -22,7 +22,13 @@
 static uint8_t hid_service_uuid[] = {
     /* LSB <--------------------------------------------------------------------------------> MSB */
     //first uuid, 16bit, [12],[13] is the value
-    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x12, 0x18, 0x00, 0x00,
+    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x12, 0x18, 0x00, 0x00
+};
+
+static esp_gatt_srvc_id_t hid_service_id = {
+    .is_primary = true,
+    .id.inst_id = 0x00,
+    .id.uuid.len = ESP_UUID_LEN_128
 };
 
 /* Characteristic uuid definitions */
@@ -38,8 +44,6 @@ static const esp_gatt_char_prop_t char_prop_read = 0 | ESP_GATT_CHAR_PROP_BIT_RE
 static const esp_gatt_char_prop_t char_prop_read_write = 0 | (ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE);
 static const esp_gatt_char_prop_t char_prop_write_nr = 0 | ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
 //static const esp_gatt_char_prop_t char_prop_write = 0 | ESP_GATT_CHAR_PROP_BIT_WRITE;
-
-
 
 // HID Report Map for Mouse
 // Documentation: https://www.usb.org/sites/default/files/documents/hid1_11.pdf (page 23)
@@ -71,6 +75,8 @@ static uint8_t hid_report_map[] = {
     0xC0,              //   End Collection
     0xC0               // End Collection
 };
+
+static uint16_t hid_handle_table[HID_IDX_NUM];
 
 // Init hid_report with default values. These will be changed later inside the gatts callback function.
 static uint8_t hid_report[] = {
@@ -171,29 +177,8 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
         {ESP_GATT_AUTO_RSP},
         {ESP_UUID_LEN_16, (uint8_t *)hid_report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
          sizeof(hid_report), sizeof(hid_report), (uint8_t *)hid_report}
-    },
-    
-    // [IDX_CHAR_HID_BOOT_MOUSE_INPUT_REPORT_DECL] = {
-    //     {ESP_GATT_AUTO_RSP},
-    //     {ESP_UUID_LEN_16, (uint8_t *)GATT_CHAR_DECL_UUID, ESP_GATT_PERM_READ, 
-    //      GATT_CHAR_DECL_SIZE, GATT_CHAR_DECL_SIZE, (uint8_t *)HID_BOOT_MOUSE_INPUT_UUID}
-    // },
-    // [IDX_CHAR_HID_BOOT_MOUSE_INPUT_REPORT_VAL] = {
-    //     {ESP_GATT_AUTO_RSP},
-    //     {ESP_UUID_LEN_16, (uint8_t *)GATT_CHAR_DECL_UUID, ESP_GATT_PERM_READ, 
-    //      sizeof(uint16_t), sizeof(HID_SERVICE_UUID), (uint8_t *)HID_SERVICE_UUID}
-    // }
+    }
 };
-
-// const esp_gatts_attr_db_t test_db[] = {
-//     // HID Service.
-//     [0] = {
-//         {ESP_GATT_AUTO_RSP},
-//         {ESP_UUID_LEN_16, (uint8_t *)gatt_service_decl_uuid, ESP_GATT_PERM_READ, 
-//             sizeof(uint16_t), sizeof(hid_service_uuid), (uint8_t *)hid_service_uuid}
-//     }
-// };
-
 
 static esp_ble_adv_data_t adv_data = {
     .set_scan_rsp = false,
@@ -211,7 +196,6 @@ static esp_ble_adv_data_t adv_data = {
     .flag = 0x6,
 };
 
-
 static esp_ble_adv_params_t adv_params = {
     .adv_int_min = 0x20,
     .adv_int_max = 0x30,
@@ -220,8 +204,6 @@ static esp_ble_adv_params_t adv_params = {
     .channel_map = ADV_CHNL_ALL,
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
-
-static uint16_t hid_handle_table[HID_IDX_NUM];
 
 
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param) {
@@ -260,17 +242,21 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
         * Start the hid gatt service.
         */
         case ESP_GATTS_CREAT_ATTR_TAB_EVT:
-            esp_ble_gatts_create_service(gatts_if, &hid_service_uuid, HID_IDX_NUM);  // Incorrect service_id type, fix.
+            // Fill service_uuid parameter of service_id struct
+            memcpy(hid_service_id.id.uuid.uuid.uuid128, hid_service_uuid, sizeof(hid_service_uuid));
+
+            esp_ble_gatts_create_service(gatts_if, &hid_service_id, HID_IDX_NUM);
+            break;
 
 
         case ESP_GATTS_CREATE_EVT:
-            ESP_LOGI(GATTS_TAG, "The total number of handles = %x",param->add_attr_tab.num_handle);
+            ESP_LOGI(GATTS_TAG, "The total number of handles = %d", param->add_attr_tab.num_handle);
             if (param->add_attr_tab.status != ESP_GATT_OK){
                 ESP_LOGE(GATTS_TAG, "Create attribute table failed, error code=0x%x", param->add_attr_tab.status);
                 return;
             }
-            else if (param->add_attr_tab.num_handle != HID_IDX_NUM){
-                ESP_LOGE(GATTS_TAG, "Create attribute table abnormally, num_handle (%d) doesn't equal to HRS_IDX_NB(%d)", param->add_attr_tab.num_handle, HID_IDX_NUM);
+            else if (param->add_attr_tab.num_handle != HID_IDX_NUM) {
+                ESP_LOGE(GATTS_TAG, "Create attribute table abnormally, num_handle (%d) doesn't equal to HID_IDX_NUM(%d)", param->add_attr_tab.num_handle, HID_IDX_NUM);
                 return;
             }
             else {
@@ -278,6 +264,15 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
                 memcpy(hid_handle_table, param->add_attr_tab.handles, HID_IDX_NUM);
                 esp_ble_gatts_start_service(hid_handle_table[IDX_HID_SERVICE]);
             }
+            break;
+
+        case ESP_GATTS_DISCONNECT_EVT:
+            ret = esp_ble_gap_start_advertising(&adv_params);
+            if (ret == ESP_OK) {
+                ESP_LOGI(GATTS_TAG, "%s -> Device disconnected! Restarting advertising! LINE %d", __func__, __LINE__);
+            }
+            break;
+
         default:
             break;
     }
@@ -322,17 +317,23 @@ esp_err_t bt_init() {
         }
     }
 
+    ESP_LOGI(GATTS_TAG, "1");
+
     esp_bt_controller_config_t bt_config = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ret = esp_bt_controller_init(&bt_config);
     if (ret != ESP_OK) {
         ESP_LOGE(GATTS_TAG, "%s failed to initialize bluetooth controller", __func__);
         return ret;
     }
+    ESP_LOGI(GATTS_TAG, "2");
+
+    esp_bt_controller_disable();
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
     if (ret != ESP_OK) {
-        ESP_LOGE(GATTS_TAG, "%s failed to enable bluetoothc controller", __func__);
+        ESP_LOGE(GATTS_TAG, "%s failed to enable bluetooth controller", __func__);
         return ret;
     }
+    ESP_LOGI(GATTS_TAG, "3");
 
     // Initialize and enable bluedroid bluetooth stack
     ret = esp_bluedroid_init();
@@ -340,18 +341,23 @@ esp_err_t bt_init() {
         ESP_LOGE(GATTS_TAG, "%s failed to initialize bluedroid stack", __func__);
         return ret;
     }
+    ESP_LOGI(GATTS_TAG, "4");
     ret = esp_bluedroid_enable();
     if (ret != ESP_OK) {
         ESP_LOGE(GATTS_TAG, "%s failed to enable bluedroid stack", __func__);
         return ret;
     }
+    ESP_LOGI(GATTS_TAG, "5");
 
     // Register callback functions (functions that perform logic in response to bluetooth events)
     esp_ble_gap_register_callback(gap_event_handler);
+    ESP_LOGI(GATTS_TAG, "6");
     esp_ble_gatts_register_callback(gatts_event_handler);
+    ESP_LOGI(GATTS_TAG, "7");
 
     // Register gatts profile
     esp_ble_gatts_app_register(MOTION_CONTROLLER_APP_ID);
+    ESP_LOGI(GATTS_TAG, "8");
 
     return ESP_OK;
 }

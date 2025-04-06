@@ -59,7 +59,7 @@ void app_main(void)
     size_t raw_accel_arr_size = sizeof(raw_accel_arr) / sizeof(raw_accel_arr[0]);
     char *axes[3] = { "X", "Y", "Z" };
     // Loop
-    while(10) {
+    while(1) {
         // Reads the MPU6050's raw acceleration values into raw_accel_arr
         mpu_read_accel(raw_accel_arr, raw_accel_arr_size);
 
