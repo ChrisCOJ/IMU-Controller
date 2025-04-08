@@ -19,30 +19,50 @@
 #define INITIAL_HID_CONTROL_POINT_VALUE     0x00
 
 
+static struct gatts_profile_inst {
+    esp_gatts_cb_t gatts_cb;
+    uint16_t gatts_if;
+    uint16_t app_id;
+    uint16_t conn_id;
+    uint16_t service_handle;
+    esp_gatt_srvc_id_t service_id;
+    uint16_t char_handle;
+    esp_bt_uuid_t char_uuid;
+    esp_gatt_perm_t perm;
+    esp_gatt_char_prop_t property;
+    uint16_t descr_handle;
+    esp_bt_uuid_t descr_uuid;
+};
+
+static struct gatts_profile_inst motion_controller_profile_tab[MOTION_CONTROLLER_PROFILE_NUM] = {
+    [MOTION_CONTROLLER_PROFILE_APP_IDX] = {
+        .gatts_cb = gatts_profile_event_handler,
+        .gatts_if = ESP_GATT_IF_NONE,       /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
+    }
+};
+
+static uint16_t hid_handle_table[HID_IDX_NUM];
+
+
 static uint8_t hid_service_uuid[] = {
     /* LSB <--------------------------------------------------------------------------------> MSB */
     //first uuid, 16bit, [12],[13] is the value
     0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x12, 0x18, 0x00, 0x00
 };
 
-static esp_gatt_srvc_id_t hid_service_id = {
-    .is_primary = true,
-    .id.inst_id = 0x00,
-    .id.uuid.len = ESP_UUID_LEN_128
-};
-
 /* Characteristic uuid definitions */
-static const uint8_t gatt_service_decl_uuid[2] = { GATT_SERVICE_DECL_UUID >> 8, GATT_SERVICE_DECL_UUID & 0x00FF };
-static const uint8_t gatt_char_decl_uuid[2] = { GATT_CHAR_DECL_UUID >> 8, GATT_CHAR_DECL_UUID & 0x00FF };
-static const uint8_t hid_info_uuid[2] = { HID_INFO_UUID >> 8, HID_INFO_UUID & 0x00FF };
-static const uint8_t hid_report_map_uuid[2] = { HID_REPORT_MAP_UUID >> 8, HID_REPORT_MAP_UUID & 0x00FF };
-static const uint8_t hid_control_point_uuid[2] = { HID_CONTROL_POINT_UUID >> 8, HID_CONTROL_POINT_UUID & 0x00FF };
-static const uint8_t hid_report_uuid[2] = { HID_REPORT_UUID >> 8, HID_REPORT_UUID & 0x00FF };
+static const uint16_t gatt_service_decl_uuid = GATT_SERVICE_DECL_UUID;
+static const uint16_t gatt_char_decl_uuid= GATT_CHAR_DECL_UUID;
+
+static const uint16_t hid_info_uuid = HID_INFO_UUID;
+static const uint16_t hid_report_map_uuid = HID_REPORT_MAP_UUID;
+static const uint16_t hid_control_point_uuid = HID_CONTROL_POINT_UUID;
+static const uint16_t hid_report_uuid = HID_REPORT_UUID;
 
 /* Characteristic property definitions */
-static const esp_gatt_char_prop_t char_prop_read = 0 | ESP_GATT_CHAR_PROP_BIT_READ;
-static const esp_gatt_char_prop_t char_prop_read_write = 0 | (ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE);
-static const esp_gatt_char_prop_t char_prop_write_nr = 0 | ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
+static const esp_gatt_char_prop_t char_prop_read = ESP_GATT_CHAR_PROP_BIT_READ;
+static const esp_gatt_char_prop_t char_prop_read_write = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE;
+static const esp_gatt_char_prop_t char_prop_write_nr = ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
 //static const esp_gatt_char_prop_t char_prop_write = 0 | ESP_GATT_CHAR_PROP_BIT_WRITE;
 
 // HID Report Map for Mouse
@@ -76,8 +96,6 @@ static uint8_t hid_report_map[] = {
     0xC0               // End Collection
 };
 
-static uint16_t hid_handle_table[HID_IDX_NUM];
-
 // Init hid_report with default values. These will be changed later inside the gatts callback function.
 static uint8_t hid_report[] = {
     0x00,       // Buttons pressed: 0x00 means no buttons pressed
@@ -98,8 +116,8 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     // HID Service.
     [IDX_HID_SERVICE] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)gatt_service_decl_uuid, ESP_GATT_PERM_READ, 
-         sizeof(uint16_t), sizeof(hid_service_uuid), (uint8_t *)hid_service_uuid}
+        {ESP_UUID_LEN_16, (uint8_t *)&gatt_service_decl_uuid, ESP_GATT_PERM_READ, 
+         sizeof(hid_service_uuid), sizeof(hid_service_uuid), (uint8_t *)hid_service_uuid}
     },
 
     /* 
@@ -108,7 +126,7 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     */
     [IDX_CHAR_HID_INFO_DECL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)gatt_char_decl_uuid, ESP_GATT_PERM_READ, 
+        {ESP_UUID_LEN_16, (uint8_t *)&gatt_char_decl_uuid, ESP_GATT_PERM_READ, 
          GATT_CHAR_DECL_SIZE, GATT_CHAR_DECL_SIZE, (uint8_t *)&char_prop_read}
     },
     /* 
@@ -117,8 +135,8 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     */
     [IDX_CHAR_HID_INFO_VAL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)hid_info_uuid, ESP_GATT_PERM_READ, 
-         sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)hid_info}
+        {ESP_UUID_LEN_16, (uint8_t *)&hid_info_uuid, ESP_GATT_PERM_READ, 
+         sizeof(hid_info), sizeof(hid_info), (uint8_t *)hid_info}
     },
 
     /*
@@ -128,7 +146,7 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     */
     [IDX_CHAR_HID_REPORT_MAP_DECL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)gatt_char_decl_uuid, ESP_GATT_PERM_READ, 
+        {ESP_UUID_LEN_16, (uint8_t *)&gatt_char_decl_uuid, ESP_GATT_PERM_READ, 
          GATT_CHAR_DECL_SIZE, GATT_CHAR_DECL_SIZE, (uint8_t *)&char_prop_read}
     },
     /* 
@@ -137,7 +155,7 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     */
     [IDX_CHAR_HID_REPORT_MAP_VAL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)hid_report_map_uuid, ESP_GATT_PERM_READ, 
+        {ESP_UUID_LEN_16, (uint8_t *)&hid_report_map_uuid, ESP_GATT_PERM_READ, 
          HID_REPORT_MAP_MAX_SIZE, sizeof(hid_report_map), (uint8_t *)hid_report_map}
     },
 
@@ -147,7 +165,7 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     */
     [IDX_CHAR_HID_CONTROL_POINT_DECL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)gatt_char_decl_uuid, ESP_GATT_PERM_READ, 
+        {ESP_UUID_LEN_16, (uint8_t *)&gatt_char_decl_uuid, ESP_GATT_PERM_READ, 
          GATT_CHAR_DECL_SIZE, GATT_CHAR_DECL_SIZE, (uint8_t *)&char_prop_write_nr}
     },
     /*
@@ -156,7 +174,7 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     */
     [IDX_CHAR_HID_CONTROL_POINT_VAL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)hid_control_point_uuid, ESP_GATT_PERM_WRITE, 
+        {ESP_UUID_LEN_16, (uint8_t *)&hid_control_point_uuid, ESP_GATT_PERM_WRITE, 
          sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&hid_control_point}
     },
 
@@ -166,7 +184,7 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     */
     [IDX_CHAR_HID_REPORT_DECL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)gatt_char_decl_uuid, ESP_GATT_PERM_READ, 
+        {ESP_UUID_LEN_16, (uint8_t *)&gatt_char_decl_uuid, ESP_GATT_PERM_READ, 
          GATT_CHAR_DECL_SIZE, GATT_CHAR_DECL_SIZE, (uint8_t *)&char_prop_read_write}
     },
     /*
@@ -175,14 +193,14 @@ const esp_gatts_attr_db_t hid_gatt_db[HID_IDX_NUM] = {
     */
     [IDX_CHAR_HID_REPORT_VAL] = {
         {ESP_GATT_AUTO_RSP},
-        {ESP_UUID_LEN_16, (uint8_t *)hid_report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+        {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
          sizeof(hid_report), sizeof(hid_report), (uint8_t *)hid_report}
     }
 };
 
 static esp_ble_adv_data_t adv_data = {
     .set_scan_rsp = false,
-    .include_name = true,
+    .include_name = false,                // Name set to false not to exceed the max advertising packet size of 31 bytes
     .include_txpower = true,
     .min_interval = 0x0006,                 // slave connection min interval, Time = min_interval * 1.25 msec
     .max_interval = 0x0010,                 // slave connection max interval, Time = max_interval * 1.25 msec
@@ -206,7 +224,35 @@ static esp_ble_adv_params_t adv_params = {
 };
 
 
-void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param) {
+static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
+{
+
+    /* If event is register event, store the gatts_if for each profile */
+    if (event == ESP_GATTS_REG_EVT) {
+        if (param->reg.status == ESP_GATT_OK) {
+            motion_controller_profile_tab[MOTION_CONTROLLER_PROFILE_APP_IDX].gatts_if = gatts_if;
+        } else {
+            ESP_LOGE(GATTS_TAG, "reg app failed, app_id %04x, status %d",
+                    param->reg.app_id,
+                    param->reg.status);
+            return;
+        }
+    }
+    do {
+        int idx;
+        for (idx = 0; idx < MOTION_CONTROLLER_PROFILE_NUM; idx++) {
+            /* ESP_GATT_IF_NONE, not specify a certain gatt_if, need to call every profile cb function */
+            if (gatts_if == ESP_GATT_IF_NONE || gatts_if == motion_controller_profile_tab[idx].gatts_if) {
+                if (motion_controller_profile_tab[idx].gatts_cb) {
+                    motion_controller_profile_tab[idx].gatts_cb(event, gatts_if, param);
+                }
+            }
+        }
+    } while (0);
+}
+
+
+static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param) {
     esp_err_t ret;
 
     switch(event) {
@@ -229,27 +275,19 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
              }
              ESP_LOGI(GATTS_TAG, "%s -> Config advertising data successful! LINE %d", __func__, __LINE__);
 
-            ret = esp_ble_gatts_create_attr_tab(hid_gatt_db, gatts_if, HID_IDX_NUM, 1);
+            ret = esp_ble_gatts_create_attr_tab(hid_gatt_db, gatts_if, HID_IDX_NUM, HID_SERVICE_INST);
             if (ret != ESP_OK) {
                 ESP_LOGE(GATTS_TAG, "%s -> Error on line %d. Creating gatt atribute table failed! Error code: %d", __func__, __LINE__, ret);
                 return;
             }
             ESP_LOGI(GATTS_TAG, "%s -> Created gatt attribute table successfully! LINE %d", __func__, __LINE__);
             break;
-
+            
         /* 
         * Check whether the attribute table has been created correctly.
         * Start the hid gatt service.
         */
         case ESP_GATTS_CREAT_ATTR_TAB_EVT:
-            // Fill service_uuid parameter of service_id struct
-            memcpy(hid_service_id.id.uuid.uuid.uuid128, hid_service_uuid, sizeof(hid_service_uuid));
-
-            esp_ble_gatts_create_service(gatts_if, &hid_service_id, HID_IDX_NUM);
-            break;
-
-
-        case ESP_GATTS_CREATE_EVT:
             ESP_LOGI(GATTS_TAG, "The total number of handles = %d", param->add_attr_tab.num_handle);
             if (param->add_attr_tab.status != ESP_GATT_OK){
                 ESP_LOGE(GATTS_TAG, "Create attribute table failed, error code=0x%x", param->add_attr_tab.status);
@@ -260,17 +298,36 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
                 return;
             }
             else {
-                ESP_LOGI(GATTS_TAG, "%u", *(param->add_attr_tab.handles));  // debug
-                memcpy(hid_handle_table, param->add_attr_tab.handles, HID_IDX_NUM);
+                ESP_LOGI(GATTS_TAG, "create attribute table successfully, the number of handles = %d", param->add_attr_tab.num_handle);
+
+                memcpy(hid_handle_table, param->add_attr_tab.handles, sizeof(hid_handle_table));
+                ESP_LOGI(GATTS_TAG, "HID handle table: ");
+                for (int i = 0; i < param->add_attr_tab.num_handle; ++i) {
+                    ESP_LOGI(GATTS_TAG, "%d", hid_handle_table[i]);
+                }
                 esp_ble_gatts_start_service(hid_handle_table[IDX_HID_SERVICE]);
             }
             break;
 
+        case ESP_GATTS_CONNECT_EVT:
+            ESP_LOGI(GATTS_TAG, "ESP_GATTS_CONNECT_EVT, conn_id = %d", param->connect.conn_id);
+            ESP_LOG_BUFFER_HEX(GATTS_TAG, param->connect.remote_bda, 6);
+            esp_ble_conn_update_params_t conn_params = {0};
+            memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
+            conn_params.latency = 0;
+            conn_params.max_int = 0x20;    // max_int = 0x20*1.25ms = 40ms
+            conn_params.min_int = 0x10;    // min_int = 0x10*1.25ms = 20ms
+            conn_params.timeout = 400;    // timeout = 400*10ms = 4000ms
+            //start sent the update connection parameters to the peer device.
+            esp_ble_gap_update_conn_params(&conn_params);
+            break;
+
         case ESP_GATTS_DISCONNECT_EVT:
             ret = esp_ble_gap_start_advertising(&adv_params);
-            if (ret == ESP_OK) {
-                ESP_LOGI(GATTS_TAG, "%s -> Device disconnected! Restarting advertising! LINE %d", __func__, __LINE__);
+            if (ret != ESP_OK) {
+                ESP_LOGE(GATTS_TAG, "Device disconnected, Restarting advertising failed!");
             }
+            ESP_LOGI(GATTS_TAG, "%s -> Device disconnected! Restarting advertising! LINE %d", __func__, __LINE__);
             break;
 
         default:
@@ -279,7 +336,7 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
 }
 
 
-void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
+static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
     esp_err_t ret;
 
     switch (event) {
@@ -297,6 +354,14 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
                 ESP_LOGE(GATTS_TAG, "Advertising start failure!");
             }
             break;
+
+        case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT:
+            ESP_LOGI(GATTS_TAG, "update connection params status = %d, conn_int = %d, latency = %d, timeout = %d",
+                  param->update_conn_params.status,
+                  param->update_conn_params.conn_int,
+                  param->update_conn_params.latency,
+                  param->update_conn_params.timeout);
+            break;
         
         default:
             break;
@@ -312,12 +377,10 @@ esp_err_t bt_init() {
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
-        if (ret != ESP_OK) {
-            return ret;
-        }
     }
+    ESP_ERROR_CHECK( ret );
 
-    ESP_LOGI(GATTS_TAG, "1");
+    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     esp_bt_controller_config_t bt_config = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ret = esp_bt_controller_init(&bt_config);
@@ -325,7 +388,6 @@ esp_err_t bt_init() {
         ESP_LOGE(GATTS_TAG, "%s failed to initialize bluetooth controller", __func__);
         return ret;
     }
-    ESP_LOGI(GATTS_TAG, "2");
 
     esp_bt_controller_disable();
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
@@ -333,7 +395,6 @@ esp_err_t bt_init() {
         ESP_LOGE(GATTS_TAG, "%s failed to enable bluetooth controller", __func__);
         return ret;
     }
-    ESP_LOGI(GATTS_TAG, "3");
 
     // Initialize and enable bluedroid bluetooth stack
     ret = esp_bluedroid_init();
@@ -341,23 +402,31 @@ esp_err_t bt_init() {
         ESP_LOGE(GATTS_TAG, "%s failed to initialize bluedroid stack", __func__);
         return ret;
     }
-    ESP_LOGI(GATTS_TAG, "4");
     ret = esp_bluedroid_enable();
     if (ret != ESP_OK) {
         ESP_LOGE(GATTS_TAG, "%s failed to enable bluedroid stack", __func__);
         return ret;
     }
-    ESP_LOGI(GATTS_TAG, "5");
 
     // Register callback functions (functions that perform logic in response to bluetooth events)
-    esp_ble_gap_register_callback(gap_event_handler);
-    ESP_LOGI(GATTS_TAG, "6");
-    esp_ble_gatts_register_callback(gatts_event_handler);
-    ESP_LOGI(GATTS_TAG, "7");
+    ret = esp_ble_gatts_register_callback(gatts_event_handler);
+    if (ret != ESP_OK){
+        ESP_LOGE(GATTS_TAG, "gatts register error, error code = %x", ret);
+        return ret;
+    }
+
+    ret = esp_ble_gap_register_callback(gap_event_handler);
+    if (ret != ESP_OK){
+        ESP_LOGE(GATTS_TAG, "gap register error, error code = %x", ret);
+        return ret;
+    }
 
     // Register gatts profile
-    esp_ble_gatts_app_register(MOTION_CONTROLLER_APP_ID);
-    ESP_LOGI(GATTS_TAG, "8");
+    ret = esp_ble_gatts_app_register(MOTION_CONTROLLER_APP_ID);
+    if (ret != ESP_OK){
+        ESP_LOGE(GATTS_TAG, "gatts app register error, error code = %x", ret);
+        return ret;
+    }
 
     return ESP_OK;
 }
