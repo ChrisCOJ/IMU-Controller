@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../include/ble_conn.h"
+#include "../include/ble_conn_setup.h"
 #include "../include/mpu_i2c.h"
-#include "../include/config.h"
+#include "../include/mc_general_defs.h"
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -66,9 +66,10 @@ void app_main(void)
         // Normalize raw acceleration values(signed int16) to pixels per second values based on mouse_sens_ratio and log them.
         for (int i=0; i < raw_accel_arr_size; ++i) {
             raw_accel_arr[i] /= mouse_sens_ratio;
-            ESP_LOGI(MPU_TAG, "%s: %d", axes[i], raw_accel_arr[i]);
+            //ESP_LOGI(MPU_TAG, "%s: %d", axes[i], raw_accel_arr[i]);
         }
-        ESP_LOGI(MPU_TAG, "");
+        //ESP_LOGI(MPU_TAG, "");
+
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 

@@ -23,6 +23,7 @@
     "esp_bt_defs.h": "c",
     "sdkconfig.h": "c",
     "ble_conn.h": "c",
-    "esp_bt.h": "c"
+    "esp_bt.h": "c",
+    "mc_general_defs.h": "c"
   }
 }
