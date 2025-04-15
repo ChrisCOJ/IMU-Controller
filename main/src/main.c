@@ -60,22 +60,23 @@ void app_main(void) {
     char *axes[3] = { "X", "Y", "Z" };
     // Loop
     while(1) {
-        // Reads the MPU6050's raw acceleration values into raw_accel_arr
-        int status = mpu_read_accel(raw_accel_arr, raw_accel_arr_size);
-        if (status != MPU_READ_ACCEL_SUCCESS) {
-            ESP_LOGE("mpu_read_accel", "Failed to read acceleration values from the mpu into the provided buffer");
-        }
-
-        // Normalize raw acceleration values(signed int16) to pixels per second values based on mouse_sens_ratio and log them.
-        for (int i=0; i < raw_accel_arr_size; ++i) {
-            raw_accel_arr[i] /= mouse_sens_ratio;
-            ESP_LOGI(MPU_TAG, "%s: %d", axes[i], raw_accel_arr[i]);
-        }
-
-        // Update HID report's xy value and notify the BLE client
-        hid_report[1] = raw_accel_arr[0]; // X offset
-        hid_report[2] = raw_accel_arr[1]; // Y offset
         if (report_enabled_notifications) {
+            // Reads the MPU6050's raw acceleration values into raw_accel_arr
+            int status = mpu_read_accel(raw_accel_arr, raw_accel_arr_size);
+            if (status != MPU_READ_ACCEL_SUCCESS) {
+                ESP_LOGE("mpu_read_accel", "Failed to read acceleration values from the mpu into the provided buffer");
+            }
+
+            // Normalize raw acceleration values(signed int16) to pixels per second values based on mouse_sens_ratio and log them.
+            for (int i=0; i < raw_accel_arr_size; ++i) {
+                raw_accel_arr[i] /= mouse_sens_ratio;
+                ESP_LOGI(MPU_TAG, "%s: %d", axes[i], raw_accel_arr[i]);
+            }
+            // Update HID report's xy value and notify the BLE client
+            hid_report[1] = raw_accel_arr[0]; // X offset
+            hid_report[2] = raw_accel_arr[1]; // Y offset
+
+            // Send report notification to the BLE host
             esp_err_t ret = esp_ble_gatts_send_indicate(motion_controller_profile_tab[HID_PROFILE_APP_IDX].gatts_if, 
                                                         motion_controller_profile_tab[HID_PROFILE_APP_IDX].conn_id, 
                                                         hid_handle_table[IDX_CHAR_HID_REPORT_VAL],
@@ -86,7 +87,7 @@ void app_main(void) {
             ESP_LOGI(GATTS_TAG, "Sent report successfully!");
         }
 
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 
     // Release i2c resources

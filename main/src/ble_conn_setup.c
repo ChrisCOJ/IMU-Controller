@@ -50,7 +50,7 @@ gatts_profile_inst motion_controller_profile_tab[MOTION_CONTROLLER_PROFILE_NUM] 
 
 /* Characteristic property definitions */
 static const esp_gatt_char_prop_t char_prop_read = ESP_GATT_CHAR_PROP_BIT_READ;
-static const esp_gatt_char_prop_t char_prop_notify = ESP_GATT_CHAR_PROP_BIT_NOTIFY;
+static const esp_gatt_char_prop_t char_prop_read_notify = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
 static const esp_gatt_char_prop_t char_prop_write_nr = ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
 
 
@@ -72,10 +72,11 @@ uint8_t hid_control_point = 0;  // Initialize control point attr in non-suspende
 
 // HID Report Map for Mouse
 // Documentation: https://www.usb.org/sites/default/files/documents/hid1_11.pdf (page 23)
-uint8_t mc_hid_report_map[50] = {
+uint8_t mc_hid_report_map[52] = {
     0x05, 0x01,        // Usage Page (Generic Desktop)
     0x09, 0x02,        // Usage (Mouse)
     0xA1, 0x01,        // Collection (Application)
+    0x85, 0x01,        //   Report ID (1)
     0x09, 0x01,        //   Usage (Pointer)
     0xA1, 0x00,        //   Collection (Physical)
     0x05, 0x09,        //     Usage Page (Buttons)
@@ -101,7 +102,7 @@ uint8_t mc_hid_report_map[50] = {
     0xC0               // End Collection
 };
 
-uint8_t report_reference_descriptor[2] = {0, 1};
+uint8_t report_reference_descriptor[2] = {1, 1};  // Report ID = 1, Report Type = Input
 
 
 // Gatt table for the motion controller app, populated with HID service and its attributes ...
@@ -178,7 +179,7 @@ const esp_gatts_attr_db_t mc_gatt_db[HID_IDX_NUM] = {
     [IDX_CHAR_HID_REPORT_DECL] = {
         {ESP_GATT_AUTO_RSP},
         {ESP_UUID_LEN_16, (uint8_t *)&GATT_CHAR_DECL_UUID, ESP_GATT_PERM_READ, 
-         GATT_CHAR_DECL_SIZE, GATT_CHAR_DECL_SIZE, (uint8_t *)&char_prop_notify}
+         GATT_CHAR_DECL_SIZE, GATT_CHAR_DECL_SIZE, (uint8_t *)&char_prop_read_notify}
     },
     /*
     * Characteristic value: HID report.
@@ -365,6 +366,8 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
         //     break;
 
         case ESP_GATTS_DISCONNECT_EVT:
+            report_enabled_notifications = false;    
+
             ret = esp_ble_gap_start_advertising(&adv_params);
             if (ret != ESP_OK) {
                 ESP_LOGE(GATTS_TAG, "Device disconnected, Restarting advertising failed!");
@@ -404,21 +407,6 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
                   param->update_conn_params.latency,
                   param->update_conn_params.timeout);
             break;
-
-            // case ESP_GAP_BLE_PASSKEY_REQ_EVT:
-            //     ESP_LOGI("GAP", "ESP_GAP_BLE_PASSKEY_REQ_EVT");
-            //     ESP_LOGI(GATTS_TAG, "Passkey request");
-            //     break;
-            
-            // case ESP_GAP_BLE_NC_REQ_EVT:
-            //     ESP_LOGI("GAP", "ESP_GAP_BLE_NC_REQ_EVT");
-            //     // Numeric comparison request
-            //     // ESP_LOGI(GATTS_TAG, "Numeric Comparison: %d", param->ble_security.key_notif.passkey);
-            //     ret = esp_ble_confirm_reply(param->ble_security.ble_req.bd_addr, true);
-            //     if (ret != ESP_OK) {
-                //         ESP_LOGE(GATTS_TAG, "Failed to confirm connection!");
-                //     }
-                //     break;
                 
         case ESP_GAP_BLE_SEC_REQ_EVT:
             ESP_LOGI("GAP", "ESP_GAP_BLE_SEC_REQ_EVT");

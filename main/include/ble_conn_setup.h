@@ -15,7 +15,7 @@
 extern uint8_t hid_report[3];
 extern uint8_t hid_info[4];
 extern uint8_t hid_control_point;
-extern uint8_t mc_hid_report_map[50];
+extern uint8_t mc_hid_report_map[52];
 extern uint8_t report_reference_descriptor[2];
 extern uint8_t HID_SERVICE_UUID[16];
 
