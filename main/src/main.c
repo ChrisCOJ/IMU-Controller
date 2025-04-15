@@ -5,6 +5,7 @@
 #include "../include/ble_conn_setup.h"
 #include "../include/mpu_i2c.h"
 #include "../include/mc_general_defs.h"
+#include "../include/mc_hid_defs.h"
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -19,8 +20,7 @@
 #include "sdkconfig.h"
 
 
-void app_main(void)
-{
+void app_main(void) {
 
     // ********************* Setup ********************* !
     // Initialize bluetooth
@@ -61,14 +61,30 @@ void app_main(void)
     // Loop
     while(1) {
         // Reads the MPU6050's raw acceleration values into raw_accel_arr
-        mpu_read_accel(raw_accel_arr, raw_accel_arr_size);
+        int status = mpu_read_accel(raw_accel_arr, raw_accel_arr_size);
+        if (status != MPU_READ_ACCEL_SUCCESS) {
+            ESP_LOGE("mpu_read_accel", "Failed to read acceleration values from the mpu into the provided buffer");
+        }
 
         // Normalize raw acceleration values(signed int16) to pixels per second values based on mouse_sens_ratio and log them.
         for (int i=0; i < raw_accel_arr_size; ++i) {
             raw_accel_arr[i] /= mouse_sens_ratio;
-            //ESP_LOGI(MPU_TAG, "%s: %d", axes[i], raw_accel_arr[i]);
+            ESP_LOGI(MPU_TAG, "%s: %d", axes[i], raw_accel_arr[i]);
         }
-        //ESP_LOGI(MPU_TAG, "");
+
+        // Update HID report's xy value and notify the BLE client
+        hid_report[1] = raw_accel_arr[0]; // X offset
+        hid_report[2] = raw_accel_arr[1]; // Y offset
+        if (report_enabled_notifications) {
+            esp_err_t ret = esp_ble_gatts_send_indicate(motion_controller_profile_tab[HID_PROFILE_APP_IDX].gatts_if, 
+                                                        motion_controller_profile_tab[HID_PROFILE_APP_IDX].conn_id, 
+                                                        hid_handle_table[IDX_CHAR_HID_REPORT_VAL],
+                                                        HID_REPORT_LEN, hid_report, false);
+            if (ret != ESP_OK) {
+                ESP_LOGE(GATTS_TAG, "Failed to send report! Error code %d", ret);
+            }
+            ESP_LOGI(GATTS_TAG, "Sent report successfully!");
+        }
 
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }

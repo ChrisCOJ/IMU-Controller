@@ -23,6 +23,8 @@
 #define MPU6050_ACCEL_4G                0x04          // Value to configure the maximum value of the accelerometer to be 4g
 #define MPU6050_ACCEL_8G                0x08          // Value to configure the maximum value of the accelerometer to be 8g
 
+#define MPU_READ_ACCEL_SUCCESS          0
+
 
 extern i2c_master_bus_handle_t mst_bus_handle;
 extern i2c_master_dev_handle_t dev_handle;
@@ -34,7 +36,7 @@ esp_err_t mpu_reg_write_byte(i2c_master_dev_handle_t dev_handle, uint8_t reg_add
 
 void mpu_init();
 
-void mpu_read_accel(int16_t *reader_array, size_t reader_array_size);
+int mpu_read_accel(int16_t *reader_array, size_t reader_array_size);
 
 
 #endif

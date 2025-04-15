@@ -19,9 +19,6 @@
 
 /********************************************
  * This file contains mpu6050 functionality 
- * and code that initializes an i2c 
- * communication channel between the esp32 
- * and mpu6050.
  *******************************************/
 
 i2c_master_bus_handle_t mst_bus_handle;
@@ -53,11 +50,11 @@ esp_err_t mpu_reg_write_byte(i2c_master_dev_handle_t dev_handle, uint8_t reg_add
 }
 
 
-void mpu_read_accel(int16_t *reader_array, size_t reader_array_size) {
+int mpu_read_accel(int16_t *reader_array, size_t reader_array_size) {
     /**  Function that reads acceleration data from an MPU6050 over I2C  **/
     if (sizeof(reader_array_size) < 3) {  // Error handling, reader_arrat size must be >= 3
         ESP_LOGE("mpu_read_accel()", "Invalid reader_array parameter size. Size must be >= 3");
-        abort();
+        return -1;
     }
 
     // Write the address of the fisrt accelerometer address and read the next 6 bytes into accel_data
@@ -74,4 +71,6 @@ void mpu_read_accel(int16_t *reader_array, size_t reader_array_size) {
 
         // ESP_LOGI(TAG, "Acceleration X: %d Y: %d Z: %d", accel_x, accel_y, accel_z);
     }
+
+    return 0;
 }
