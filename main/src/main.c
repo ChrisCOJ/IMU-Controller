@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "../include/ble_conn_setup.h"
 #include "../include/mpu_i2c.h"
 #include "../include/mc_general_defs.h"
 #include "../include/mc_hid_defs.h"
+
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -19,10 +21,94 @@
 
 #include "sdkconfig.h"
 
+#define ACCEL_4G_RATIO          4096        // Accelerometer values are divided by this ratio and converted to Gs (Sensitivity = 8G)
+#define GYRO_250_DEG_RATIO      131.0       // Gyroscope values are divided by this ratio and converted to degrees (Sensitivity = 250 deg)
+
+
+int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t* hid_report, size_t hid_report_size) {
+    int status;
+    // float ax, ay, az;
+    // float gx, gy, gz;
+    uint8_t x, y;
+
+    // Initialize buffers for acceleration and gyro data
+    int16_t raw_accel_arr[3];
+    size_t raw_accel_arr_size = sizeof(raw_accel_arr) / sizeof(raw_accel_arr[0]);
+    int16_t gyro_arr[3];
+    size_t gyro_arr_size = sizeof(gyro_arr) / sizeof(gyro_arr[0]);
+    char *axes[3] = { "X", "Y", "Z" };  // Used for logging
+
+    // Read raw acceleration values from the MPU
+    status = mpu_read_data(MPU_ACCEL_DATA, dev_handle, raw_accel_arr, raw_accel_arr_size);
+    if (status != MPU_READ_SUCCESS) {
+        ESP_LOGE(MAIN_TAG, "Failed to read acceleration values from the mpu into the provided buffer");
+        return -1;
+    }
+
+    // Read raw gyro values from the MPU
+    status = mpu_read_data(MPU_GYRO_DATA, dev_handle, gyro_arr, gyro_arr_size);
+    if (status != MPU_READ_SUCCESS) {
+        ESP_LOGE(MAIN_TAG, "Failed to read gyro values from the mpu into the provided buffer");
+        return -1;
+    }
+
+    // Process MPU movement and rotation data into cursor xy position
+    // Convert acceleration range to G
+    // ax = (float)raw_accel_arr[0] / ACCEL_4G_RATIO;
+    // ay = (float)raw_accel_arr[1] / ACCEL_4G_RATIO;
+    // az = (float)raw_accel_arr[2] / ACCEL_4G_RATIO;
+    // ESP_LOGI("Accel", "X = %f", ax);
+    // ESP_LOGI("Accel", "Y = %f", ay);
+    // ESP_LOGI("Accel", "Z = %f", az);
+
+    for (int i=0; i < gyro_arr_size; ++i) {
+        gyro_arr[i] /= GYRO_250_DEG_RATIO;
+        ESP_LOGI("Gyroscope", "%s = %d", axes[i], gyro_arr[i]);
+    }
+
+    x = (uint8_t)(gyro_arr[1] * 0.5);
+    y = -(uint8_t)(gyro_arr[2] * 0.5);
+
+    // Update HID report's xy values
+    hid_report[1] = y;
+    hid_report[2] = x;
+
+    return 0;
+}
+
+
+void send_hid_report(void* param) {
+    i2c_master_dev_handle_t i2c_dev_handle = (i2c_master_dev_handle_t)param;
+
+    while(1) {
+        if (report_enabled_notifications) {
+            int status = process_mpu_output_to_hid_report(i2c_dev_handle, hid_report, sizeof(hid_report));
+            if (status) {
+                ESP_LOGE(MAIN_TAG, "Failed to update hid report!");
+            }
+
+            // Send processed report notification to the BLE host
+            esp_err_t ret = esp_ble_gatts_send_indicate(motion_controller_profile_tab[HID_PROFILE_APP_IDX].gatts_if, 
+                                                        motion_controller_profile_tab[HID_PROFILE_APP_IDX].conn_id, 
+                                                        hid_handle_table[IDX_CHAR_HID_REPORT_VAL],
+                                                        HID_REPORT_LEN, hid_report, false);
+            if (ret != ESP_OK) {
+                ESP_LOGE(GATTS_TAG, "Failed to send report! Error code %d", ret);
+            }
+            ESP_LOGI(GATTS_TAG, "Sent report successfully!");
+        }
+
+        vTaskDelay(1 / portTICK_PERIOD_MS);
+    }
+}
+
 
 void app_main(void) {
 
     // ********************* Setup ********************* !
+    static i2c_master_bus_handle_t mst_bus_handle;
+    static i2c_master_dev_handle_t dev_handle;
+
     // Initialize bluetooth
     if (bt_init() != ESP_OK){
         ESP_LOGE(GATTS_TAG, "%s Failed to initialize bluetooth", __func__);
@@ -47,48 +133,10 @@ void app_main(void) {
     };
     ESP_ERROR_CHECK(i2c_master_bus_add_device(mst_bus_handle, &dev_cfg, &dev_handle));
 
-    mpu_init();  // Wake up mpu sensor and configure it's registers
+    mpu_init(dev_handle);  // Wake up mpu sensor and configure it's registers
     // *************************************************** !
 
-    /** Gyro and Accelerometer values are divided by this ratio and converted to
-    mouse sensitivity (pixels per second) **/
-    uint16_t mouse_sens_ratio = 1000;
-
-    // This array will hold the raw 16-bit acceleration values for the X, Y, and Z axes.
-    int16_t raw_accel_arr[3];
-    size_t raw_accel_arr_size = sizeof(raw_accel_arr) / sizeof(raw_accel_arr[0]);
-    char *axes[3] = { "X", "Y", "Z" };
-    // Loop
-    while(1) {
-        if (report_enabled_notifications) {
-            // Reads the MPU6050's raw acceleration values into raw_accel_arr
-            int status = mpu_read_accel(raw_accel_arr, raw_accel_arr_size);
-            if (status != MPU_READ_ACCEL_SUCCESS) {
-                ESP_LOGE("mpu_read_accel", "Failed to read acceleration values from the mpu into the provided buffer");
-            }
-
-            // Normalize raw acceleration values(signed int16) to pixels per second values based on mouse_sens_ratio and log them.
-            for (int i=0; i < raw_accel_arr_size; ++i) {
-                raw_accel_arr[i] /= mouse_sens_ratio;
-                ESP_LOGI(MPU_TAG, "%s: %d", axes[i], raw_accel_arr[i]);
-            }
-            // Update HID report's xy value and notify the BLE client
-            hid_report[1] = raw_accel_arr[0]; // X offset
-            hid_report[2] = raw_accel_arr[1]; // Y offset
-
-            // Send report notification to the BLE host
-            esp_err_t ret = esp_ble_gatts_send_indicate(motion_controller_profile_tab[HID_PROFILE_APP_IDX].gatts_if, 
-                                                        motion_controller_profile_tab[HID_PROFILE_APP_IDX].conn_id, 
-                                                        hid_handle_table[IDX_CHAR_HID_REPORT_VAL],
-                                                        HID_REPORT_LEN, hid_report, false);
-            if (ret != ESP_OK) {
-                ESP_LOGE(GATTS_TAG, "Failed to send report! Error code %d", ret);
-            }
-            ESP_LOGI(GATTS_TAG, "Sent report successfully!");
-        }
-
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
+    xTaskCreate(send_hid_report, "MC", 4096, dev_handle, 5, NULL);
 
     // Release i2c resources
     // i2c_master_bus_rm_device(&dev_handle);

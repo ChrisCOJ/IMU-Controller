@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "../include/mpu_i2c.h"
+#include "../include/mc_general_defs.h"
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -21,15 +22,15 @@
  * This file contains mpu6050 functionality 
  *******************************************/
 
-i2c_master_bus_handle_t mst_bus_handle;
-i2c_master_dev_handle_t dev_handle;
-
-void mpu_init() {
+void mpu_init(i2c_master_dev_handle_t dev_handle) {
     // Wake up the MPU6050
     mpu_reg_write_byte(dev_handle, MPU6050_PWR_MGMT1_REG, MPU6050_WAKE_UP_SIG);
 
-    // Configure the MPU6050 accelerometer 
+    // Configure the MPU6050 accelerometer to 8G sens
     mpu_reg_write_byte(dev_handle, MPU6050_ACCEL_CONFIG_REG, MPU6050_ACCEL_8G);
+
+    // Configure the MPU6050 gyroscope to 250 degree sens
+    mpu_reg_write_byte(dev_handle, MPU6050_GYRO_CONFIG_REG, MPU6050_GYRO_250_DEG);
 }
 
 
@@ -50,26 +51,38 @@ esp_err_t mpu_reg_write_byte(i2c_master_dev_handle_t dev_handle, uint8_t reg_add
 }
 
 
-int mpu_read_accel(int16_t *reader_array, size_t reader_array_size) {
-    /**  Function that reads acceleration data from an MPU6050 over I2C  **/
-    if (sizeof(reader_array_size) < 3) {  // Error handling, reader_arrat size must be >= 3
-        ESP_LOGE("mpu_read_accel()", "Invalid reader_array parameter size. Size must be >= 3");
+int mpu_read_data(int data_type, i2c_master_dev_handle_t dev_handle, int16_t *reader_arr, size_t reader_arr_size) {
+    esp_err_t err;
+
+    /**  Function that reads mpu data from an MPU6050 over I2C  **/
+    if (reader_arr_size < 3) {  // Error handling, accel array size must be >= 3
+        ESP_LOGE(MPU_TAG, "Invalid acceleration array parameter size. Size must be >= 3");
         return -1;
     }
 
-    // Write the address of the fisrt accelerometer address and read the next 6 bytes into accel_data
-    uint8_t accel_data[6];
-    esp_err_t err = mpu_read_reg(dev_handle, MPU6050_ACCEL_REG, accel_data, sizeof(accel_data));
+    // Write the address of the first accelerometer or gyroscope address and read the next 6 bytes into data
+    uint8_t data[6];
+    switch (data_type) {
+        case MPU_ACCEL_DATA:
+            err = mpu_read_reg(dev_handle, MPU6050_ACCEL_REG, data, sizeof(data));
+            break;
+
+        case MPU_GYRO_DATA:
+            err = mpu_read_reg(dev_handle, MPU6050_GYRO_REG, data, sizeof(data));
+            break;
+        
+        default:
+            ESP_LOGE(MPU_TAG, "The data_type parameter %d is invalid", data_type);
+            return -1;
+    }
 
     if (err == ESP_OK) {
-        int16_t accel_x = ((accel_data[0] << 8) | accel_data[1]);
-        reader_array[0] = accel_x;
-        int16_t accel_y = ((accel_data[2] << 8) | accel_data[3]);
-        reader_array[1] = accel_y;
-        int16_t accel_z = ((accel_data[4] << 8) | accel_data[5]);
-        reader_array[2] = accel_z;
-
-        // ESP_LOGI(TAG, "Acceleration X: %d Y: %d Z: %d", accel_x, accel_y, accel_z);
+        int16_t x = ((data[0] << 8) | data[1]);
+        reader_arr[0] = x;
+        int16_t y = ((data[2] << 8) | data[3]);
+        reader_arr[1] = y;
+        int16_t z = ((data[4] << 8) | data[5]);
+        reader_arr[2] = z;
     }
 
     return 0;

@@ -18,25 +18,31 @@
 #define MPU6050_SLEEP_BIT               6
 
 #define MPU6050_ACCEL_REG               0x3B          // The address of the first MPU6050's accelerometer register
-#define MPU6050_ACCEL_CONFIG_REG        0x1c          // Bits 4 and 3 are used to set the maximum value of the accelerometer outputs
-#define MPU6050_ACCEL_2G                0x00          // Value to configure the maximum value of the accelerometer to be 2g
-#define MPU6050_ACCEL_4G                0x04          // Value to configure the maximum value of the accelerometer to be 4g
-#define MPU6050_ACCEL_8G                0x08          // Value to configure the maximum value of the accelerometer to be 8g
+#define MPU6050_ACCEL_CONFIG_REG        0x1C          // Accel Config register address. Bits 4 and 3 are used to set the maximum value of the accelerometer outputs
+#define MPU6050_ACCEL_2G                0x00          // Value to configure the accelerometer sensitivity to be 2g
+#define MPU6050_ACCEL_4G                0x08          // Value to configure the accelerometer sensitivity to be 4g
+#define MPU6050_ACCEL_8G                0x10          // Value to configure the accelerometer sensitivity to be 8g
 
-#define MPU_READ_ACCEL_SUCCESS          0
+#define MPU6050_GYRO_REG                0x43          // The address of the first MPU6050's gyro register
+#define MPU6050_GYRO_CONFIG_REG         0x1B          // Gyro Config register address. Bits 4 and 3 are used to set the maximum value of the gyro outputs
+#define MPU6050_GYRO_250_DEG            0x00          // Value to configure the gyro sensitivity to be 250 degrees / second
+#define MPU6050_GYRO_500_DEG            0x08          // Value to configure the gyro sensitivity to be 500 degrees / second
+#define MPU6050_GYRO_1000_DEG           0x10          // Value to configure the gyro sensitivity to be 1000 degrees / second
+#define MPU6050_GYRO_2000_DEG           0x18          // Value to configure the gyro sensitivity to be 2000 degrees / second
 
 
-extern i2c_master_bus_handle_t mst_bus_handle;
-extern i2c_master_dev_handle_t dev_handle;
+#define MPU_READ_SUCCESS                0             // Success status code for reading data from the MPU
+
+#define MPU_ACCEL_DATA                  0             // Acceleration data type parameter used in mpu_read_data() function
+#define MPU_GYRO_DATA                   1             // Gyro data type parameter used in mpu_read_data() function
 
 
 esp_err_t mpu_read_reg(i2c_master_dev_handle_t dev_handle, uint8_t reg_address, uint8_t *read_buffer, size_t read_buffer_size);
 
 esp_err_t mpu_reg_write_byte(i2c_master_dev_handle_t dev_handle, uint8_t reg_address, uint8_t data);
 
-void mpu_init();
+void mpu_init(i2c_master_dev_handle_t dev_handle);
 
-int mpu_read_accel(int16_t *reader_array, size_t reader_array_size);
-
+int mpu_read_data(int data_type, i2c_master_dev_handle_t dev_handle, int16_t *reader_array, size_t reader_array_size);
 
 #endif
