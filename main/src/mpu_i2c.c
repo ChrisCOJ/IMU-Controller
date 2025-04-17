@@ -26,8 +26,8 @@ void mpu_init(i2c_master_dev_handle_t dev_handle) {
     // Wake up the MPU6050
     mpu_reg_write_byte(dev_handle, MPU6050_PWR_MGMT1_REG, MPU6050_WAKE_UP_SIG);
 
-    // Configure the MPU6050 accelerometer to 8G sens
-    mpu_reg_write_byte(dev_handle, MPU6050_ACCEL_CONFIG_REG, MPU6050_ACCEL_8G);
+    // Configure the MPU6050 accelerometer to 2G sens
+    mpu_reg_write_byte(dev_handle, MPU6050_ACCEL_CONFIG_REG, MPU6050_ACCEL_2G);
 
     // Configure the MPU6050 gyroscope to 250 degree sens
     mpu_reg_write_byte(dev_handle, MPU6050_GYRO_CONFIG_REG, MPU6050_GYRO_250_DEG);

@@ -21,32 +21,75 @@
 
 #include "sdkconfig.h"
 
-#define ACCEL_4G_RATIO          4096                // Accelerometer values are divided by this ratio and converted to Gs (Sensitivity = 8G)
-#define GYRO_250_DEG_RATIO      131.0               // Gyroscope values are divided by this ratio and converted to degrees (Sensitivity = 250 deg)
-#define SENS_RATIO              0.5                 // Divisor to calculate final pointer sensitivity
-#define LEFT_CLICK_GPIO         GPIO_NUM_23
+#define ACCEL_2G_RATIO              16384               // Accelerometer values are divided by this ratio and converted to Gs (Sensitivity = 2G)
+#define GYRO_250_DEG_RATIO          131.0               // Gyroscope values are divided by this ratio and converted to degrees (Sensitivity = 250 deg)
+#define SENS_RATIO                  0.5                 // Divisor to calculate final pointer sensitivity
+#define LEFT_CLICK_GPIO             GPIO_NUM_23
+#define CALIBRATION_DONE            0
+#define CALIBRATION_IN_PROGRESS     1
+#define AVERAGE_Y_SAMPLE_SIZE       20
+
+
+// Initialize buffers for acceleration and gyro data
+static uint8_t x, y;
+static int16_t accel_arr[3];
+static size_t accel_arr_size = sizeof(accel_arr) / sizeof(accel_arr[0]);
+static int16_t gyro_arr[3];
+static size_t gyro_arr_size = sizeof(gyro_arr) / sizeof(gyro_arr[0]);
+
+float averaged_y_accel_arr[AVERAGE_Y_SAMPLE_SIZE];
+uint8_t calibration_roll_reading_idx = 0;       // Array index used to initially populate the averaged_y_accel_arr
+uint8_t roll_reading_idx = 0;                   // Array index used to update the averaged_y_accel_arr and get average value
+
+
+int calibrate_remote(float accel_y) {
+    /* Calculate MPU roll for more responsive movement
+    * 1. Average y-axis accelerometer readings (e.g. over 20 readings).
+    * 2. Determine a gyroscope x-axis deadzone to filter out random noise (e.g. roll will be read only if
+    *    gyroscope x-axis reading surpasses 10/-10).
+    * 3. Ignore large y-axis accelerometer values exceeding the maximum gravitational acceleration.
+    * 4. Following this preprocessing, the y-axis acclerometer reading will now serve as an estimate for roll.
+    */
+    if (calibration_roll_reading_idx >= AVERAGE_Y_SAMPLE_SIZE) {
+        return CALIBRATION_DONE;
+    }
+    averaged_y_accel_arr[calibration_roll_reading_idx] = accel_y;
+    ++calibration_roll_reading_idx;
+
+    return CALIBRATION_IN_PROGRESS;
+}
+
+
+float get_average_roll(float accel_y) {
+    float sum = 0;
+    float average = 0;
+
+    for (int i=0; i < AVERAGE_Y_SAMPLE_SIZE; ++i) {
+        sum += averaged_y_accel_arr[i];
+    }
+    average = sum / AVERAGE_Y_SAMPLE_SIZE;
+
+    ++roll_reading_idx;
+    if (roll_reading_idx >= AVERAGE_Y_SAMPLE_SIZE) {
+        roll_reading_idx = 0;
+    }
+
+    averaged_y_accel_arr[roll_reading_idx] = accel_y;
+
+    return average;
+}
 
 
 int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t* hid_report, size_t hid_report_size) {
     int status;
-    // float ax, ay, az;
-    // float gx, gy, gz;
-    uint8_t x, y;
-
-    // Initialize buffers for acceleration and gyro data
-    int16_t raw_accel_arr[3];
-    size_t raw_accel_arr_size = sizeof(raw_accel_arr) / sizeof(raw_accel_arr[0]);
-    int16_t gyro_arr[3];
-    size_t gyro_arr_size = sizeof(gyro_arr) / sizeof(gyro_arr[0]);
-    char *axes[3] = { "X", "Y", "Z" };  // Used for logging
+    // char *axes[3] = { "X", "Y", "Z" };  // Used for logging
 
     // Read raw acceleration values from the MPU
-    status = mpu_read_data(MPU_ACCEL_DATA, dev_handle, raw_accel_arr, raw_accel_arr_size);
+    status = mpu_read_data(MPU_ACCEL_DATA, dev_handle, accel_arr, accel_arr_size);
     if (status != MPU_READ_SUCCESS) {
         ESP_LOGE(MAIN_TAG, "Failed to read acceleration values from the mpu into the provided buffer");
         return -1;
     }
-
     // Read raw gyro values from the MPU
     status = mpu_read_data(MPU_GYRO_DATA, dev_handle, gyro_arr, gyro_arr_size);
     if (status != MPU_READ_SUCCESS) {
@@ -55,30 +98,33 @@ int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t
     }
 
     // Process MPU movement and rotation data into cursor xy position
-    // Convert acceleration range to G
-    // ax = (float)raw_accel_arr[0] / ACCEL_4G_RATIO;
-    // ay = (float)raw_accel_arr[1] / ACCEL_4G_RATIO;
-    // az = (float)raw_accel_arr[2] / ACCEL_4G_RATIO;
-    // ESP_LOGI("Accel", "X = %f", ax);
-    // ESP_LOGI("Accel", "Y = %f", ay);
-    // ESP_LOGI("Accel", "Z = %f", az);
+    // Convert acceleration range to Gs (max sens = 2G / second)
+    // float accel_x = (float)accel_arr[0] / (float)ACCEL_2G_RATIO;
+    float accel_y = (float)accel_arr[1] / (float)ACCEL_2G_RATIO;
+    // float accel_z = (float)accel_arr[2] / (float)ACCEL_2G_RATIO;
 
+    // Convert gyroscope range to degrees (max sens = 250 deg / second)
     for (int i=0; i < gyro_arr_size; ++i) {
         gyro_arr[i] /= GYRO_250_DEG_RATIO;
-        ESP_LOGI("Gyroscope", "%s = %d", axes[i], gyro_arr[i]);
+        // ESP_LOGI("Gyroscope", "%s = %d", axes[i], gyro_arr[i]);
     }
 
-    x = (uint8_t)(gyro_arr[1] * SENS_RATIO);
-    y = -(uint8_t)(gyro_arr[2] * SENS_RATIO);
+    if (calibrate_remote(accel_y) == CALIBRATION_DONE) {
+        float roll = get_average_roll(accel_y);
+        ESP_LOGI("Roll", "%f", roll);
 
-    // Update HID report's xy values
-    if (!gpio_get_level(LEFT_CLICK_GPIO)) {     // Checks if the left click button is pressed
-        hid_report[0] = 1;                      // 1 = HID mouse left click pressed
-    } else {
-        hid_report[0] = 0;
+        x = (uint8_t)((gyro_arr[1] + gyro_arr[2] * roll) * SENS_RATIO);
+        y = -(uint8_t)((gyro_arr[2] + gyro_arr[1] * roll) * SENS_RATIO);
+
+        // Update HID report's xy values
+        if (!gpio_get_level(LEFT_CLICK_GPIO)) {     // Checks if the left click button is pressed
+            hid_report[0] = 1;                      // 1 = HID mouse left click pressed
+        } else {
+            hid_report[0] = 0;
+        }
+        hid_report[1] = y;
+        hid_report[2] = x;
     }
-    hid_report[1] = y;
-    hid_report[2] = x;
 
     return 0;
 }
