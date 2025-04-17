@@ -21,8 +21,10 @@
 
 #include "sdkconfig.h"
 
-#define ACCEL_4G_RATIO          4096        // Accelerometer values are divided by this ratio and converted to Gs (Sensitivity = 8G)
-#define GYRO_250_DEG_RATIO      131.0       // Gyroscope values are divided by this ratio and converted to degrees (Sensitivity = 250 deg)
+#define ACCEL_4G_RATIO          4096                // Accelerometer values are divided by this ratio and converted to Gs (Sensitivity = 8G)
+#define GYRO_250_DEG_RATIO      131.0               // Gyroscope values are divided by this ratio and converted to degrees (Sensitivity = 250 deg)
+#define SENS_RATIO              0.5                 // Divisor to calculate final pointer sensitivity
+#define LEFT_CLICK_GPIO         GPIO_NUM_23
 
 
 int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t* hid_report, size_t hid_report_size) {
@@ -66,10 +68,15 @@ int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t
         ESP_LOGI("Gyroscope", "%s = %d", axes[i], gyro_arr[i]);
     }
 
-    x = (uint8_t)(gyro_arr[1] * 0.5);
-    y = -(uint8_t)(gyro_arr[2] * 0.5);
+    x = (uint8_t)(gyro_arr[1] * SENS_RATIO);
+    y = -(uint8_t)(gyro_arr[2] * SENS_RATIO);
 
     // Update HID report's xy values
+    if (!gpio_get_level(LEFT_CLICK_GPIO)) {     // Checks if the left click button is pressed
+        hid_report[0] = 1;                      // 1 = HID mouse left click pressed
+    } else {
+        hid_report[0] = 0;
+    }
     hid_report[1] = y;
     hid_report[2] = x;
 
@@ -134,6 +141,17 @@ void app_main(void) {
     ESP_ERROR_CHECK(i2c_master_bus_add_device(mst_bus_handle, &dev_cfg, &dev_handle));
 
     mpu_init(dev_handle);  // Wake up mpu sensor and configure it's registers
+
+    // Configure the left click button GPIO pin
+    gpio_config_t io_conf = {
+        .intr_type    = GPIO_INTR_DISABLE,         // Disable interrupt
+        .mode         = GPIO_MODE_INPUT,           // Set GPIO as input    
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,     // Disable pulldown resistors
+        .pull_up_en   = GPIO_PULLUP_ENABLE,        // Enable pullup resistors
+        .pin_bit_mask = 1 << LEFT_CLICK_GPIO
+    };
+
+    gpio_config(&io_conf);
     // *************************************************** !
 
     xTaskCreate(send_hid_report, "MC", 4096, dev_handle, 5, NULL);
