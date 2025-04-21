@@ -219,6 +219,19 @@ static esp_ble_adv_data_t adv_data = {
     .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
 };
 
+static esp_ble_adv_data_t scan_rsp_data = {
+    .set_scan_rsp = true,
+    .include_name = true,
+    .include_txpower = false,
+    .manufacturer_len = 0,
+    .p_manufacturer_data = NULL,
+    .service_data_len = 0,
+    .p_service_data = NULL,
+    .service_uuid_len = 0,
+    .p_service_uuid = NULL,
+    .flag = 0
+};
+
 static esp_ble_adv_params_t adv_params = {
     .adv_int_min = 0x20,
     .adv_int_max = 0x30,
@@ -232,14 +245,14 @@ static esp_ble_adv_params_t adv_params = {
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param) {
 
     // ************************* Debugging ************************
-    ESP_LOGI(GATTS_TAG, "Event triggered: %d", event);
+    // ESP_LOGI(GATTS_TAG, "Event triggered: %d", event);
 
-    if (event == ESP_GATTS_WRITE_EVT) {
-        ESP_LOGI(GATTS_TAG, "Write data = ");
-        for (int i = 0; i < param->write.len; ++i) {
-            ESP_LOGI(GATTC_TAG, "%u", *(param->write.value + i));
-        }
-    }
+    // if (event == ESP_GATTS_WRITE_EVT) {
+    //     ESP_LOGI(GATTS_TAG, "Write data = ");
+    //     for (int i = 0; i < param->write.len; ++i) {
+    //         ESP_LOGI(GATTC_TAG, "%u", *(param->write.value + i));
+    //     }
+    // }
     // ************************************************************
 
     /* If event is register event, store the gatts_if for each profile */
@@ -289,6 +302,13 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
                 return;
              }
              ESP_LOGI(GATTS_TAG, "%s -> Config advertising data successful! LINE %d", __func__, __LINE__);
+
+            ret = esp_ble_gap_config_adv_data(&scan_rsp_data);
+            if (ret != ESP_OK){
+                ESP_LOGE(GATTS_TAG, "%s -> Error on line %d. Config scan response data failed! Error code: %d", __func__, __LINE__, ret);
+                return;
+            }
+            ESP_LOGI(GATTS_TAG, "%s -> Config scan response data successful! LINE %d", __func__, __LINE__);
 
             ret = esp_ble_gatts_create_attr_tab(mc_gatt_db, gatts_if, HID_IDX_NUM, HID_SERVICE_INST);
             if (ret != ESP_OK) {

@@ -111,7 +111,6 @@ int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t
 
     if (calibrate_remote(accel_y) == CALIBRATION_DONE) {
         float roll = get_average_roll(accel_y);
-        ESP_LOGI("Roll", "%f", roll);
 
         x = (uint8_t)((gyro_arr[1] + gyro_arr[2] * roll) * SENS_RATIO);
         y = -(uint8_t)((gyro_arr[2] + gyro_arr[1] * roll) * SENS_RATIO);
@@ -148,10 +147,10 @@ void send_hid_report(void* param) {
             if (ret != ESP_OK) {
                 ESP_LOGE(GATTS_TAG, "Failed to send report! Error code %d", ret);
             }
-            ESP_LOGI(GATTS_TAG, "Sent report successfully!");
+            // ESP_LOGI(GATTS_TAG, "Sent report successfully!");
         }
 
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        // vTaskDelay(1 / portTICK_PERIOD_MS);
     }
 }
 
