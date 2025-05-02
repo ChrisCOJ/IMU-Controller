@@ -1,0 +1,5 @@
+#ifndef IR_CAM_BLOB_DETECTION_H
+#define IR_CAM_BLOB_DETECTION_H
+
+
+#endif

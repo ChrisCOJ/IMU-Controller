@@ -45,8 +45,8 @@ uint8_t roll_reading_idx = 0;                   // Array index used to update th
 int calibrate_remote(float accel_y) {
     /* Calculate MPU roll for more responsive movement
     * 1. Average y-axis accelerometer readings (e.g. over 20 readings).
-    * 2. Determine a gyroscope x-axis deadzone to filter out random noise (e.g. roll will be read only if
-    *    gyroscope x-axis reading surpasses 10/-10).
+    * 2. Determine a gyroscope y-axis deadzone to filter out random noise (e.g. roll will be read, only if
+    *    gyroscope y-axis reading surpasses 10/-10).
     * 3. Ignore large y-axis accelerometer values exceeding the maximum gravitational acceleration.
     * 4. Following this preprocessing, the y-axis acclerometer reading will now serve as an estimate for roll.
     */
@@ -61,6 +61,8 @@ int calibrate_remote(float accel_y) {
 
 
 float get_average_roll(float accel_y) {
+    // * Returns average roll ranging from 0.0 to 2.0
+
     float sum = 0;
     float average = 0;
 
@@ -69,6 +71,8 @@ float get_average_roll(float accel_y) {
     }
     average = sum / AVERAGE_Y_SAMPLE_SIZE;
 
+    /* Once an average has been calulated, replace the oldest reading in the average roll buffer with a new reading,
+    Effectively creating a sliding window */
     ++roll_reading_idx;
     if (roll_reading_idx >= AVERAGE_Y_SAMPLE_SIZE) {
         roll_reading_idx = 0;
@@ -98,12 +102,12 @@ int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t
     }
 
     // Process MPU movement and rotation data into cursor xy position
+
     // Convert acceleration range to Gs (max sens = 2G / second)
-    // float accel_x = (float)accel_arr[0] / (float)ACCEL_2G_RATIO;
     float accel_y = (float)accel_arr[1] / (float)ACCEL_2G_RATIO;
-    // float accel_z = (float)accel_arr[2] / (float)ACCEL_2G_RATIO;
 
     // Convert gyroscope range to degrees (max sens = 250 deg / second)
+    // gyro[0] = x, gyro[1] = y, gyro[2] = z
     for (int i=0; i < gyro_arr_size; ++i) {
         gyro_arr[i] /= GYRO_250_DEG_RATIO;
         // ESP_LOGI("Gyroscope", "%s = %d", axes[i], gyro_arr[i]);
@@ -118,9 +122,11 @@ int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t
         // Update HID report's xy values
         if (!gpio_get_level(LEFT_CLICK_GPIO)) {     // Checks if the left click button is pressed
             hid_report[0] = 1;                      // 1 = HID mouse left click pressed
+            x = 0, y = 0;
         } else {
             hid_report[0] = 0;
         }
+
         hid_report[1] = y;
         hid_report[2] = x;
     }
@@ -159,7 +165,7 @@ void app_main(void) {
 
     // ********************* Setup ********************* !
     static i2c_master_bus_handle_t mst_bus_handle;
-    static i2c_master_dev_handle_t dev_handle;
+    static i2c_master_dev_handle_t mpu_dev_handle;
 
     // Initialize bluetooth
     if (bt_init() != ESP_OK){
@@ -178,14 +184,14 @@ void app_main(void) {
     };
     ESP_ERROR_CHECK(i2c_new_master_bus(&mst_cfg, &mst_bus_handle));
 
-    i2c_device_config_t dev_cfg = {
+    i2c_device_config_t mpu_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_7,  // Sets address length of the slave device
         .device_address = MPU6050_I2C_ADDR,
         .scl_speed_hz = I2C_SCL_CLK_HZ,
     };
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(mst_bus_handle, &dev_cfg, &dev_handle));
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(mst_bus_handle, &mpu_cfg, &mpu_dev_handle));
 
-    mpu_init(dev_handle);  // Wake up mpu sensor and configure it's registers
+    mpu_init(mpu_dev_handle);  // Wake up mpu sensor and configure it's registers
 
     // Configure the left click button GPIO pin
     gpio_config_t io_conf = {
@@ -199,7 +205,7 @@ void app_main(void) {
     gpio_config(&io_conf);
     // *************************************************** !
 
-    xTaskCreate(send_hid_report, "MC", 4096, dev_handle, 5, NULL);
+    xTaskCreate(send_hid_report, "MC", 4096, mpu_dev_handle, 5, NULL);
 
     // Release i2c resources
     // i2c_master_bus_rm_device(&dev_handle);

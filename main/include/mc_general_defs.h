@@ -5,6 +5,6 @@
 #define GATTS_TAG                           "Server"
 #define GATTC_TAG                           "Client"
 #define MPU_TAG                             "MPU"
-#define MAIN_TAG                              "Main App"
+#define MAIN_TAG                            "Main App"
 
 #endif

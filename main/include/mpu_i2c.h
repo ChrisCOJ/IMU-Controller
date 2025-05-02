@@ -6,8 +6,8 @@
 
 
 #define I2C_MASTER_PORT                 I2C_NUM_0     // Port number used by esp32
-#define I2C_MASTER_GPIO_SDA             22            // GPIO number for serial data bus (SDA)
-#define I2C_MASTER_GPIO_SCL             21            // GPIO number for serial clock bus (SCL)
+#define I2C_MASTER_GPIO_SDA             18            // GPIO number for serial data bus (SDA)
+#define I2C_MASTER_GPIO_SCL             19            // GPIO number for serial clock bus (SCL)
 #define I2C_SCL_CLK_HZ                  100000        // I2C Clock speed in hz
 #define I2C_MASTER_TIMEOUT_MS           1000          // Time in ms to timeout communication
 
