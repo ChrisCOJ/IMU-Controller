@@ -23,7 +23,7 @@
 
 #define ACCEL_2G_RATIO              16384               // Accelerometer values are divided by this ratio and converted to Gs (Sensitivity = 2G)
 #define GYRO_250_DEG_RATIO          131.0               // Gyroscope values are divided by this ratio and converted to degrees (Sensitivity = 250 deg)
-#define SENS_RATIO                  0.5                 // Divisor to calculate final pointer sensitivity
+#define SENS_RATIO                  0.7                 // Divisor to calculate final pointer sensitivity
 #define LEFT_CLICK_GPIO             GPIO_NUM_23
 #define CALIBRATION_DONE            0
 #define CALIBRATION_IN_PROGRESS     1
@@ -122,7 +122,7 @@ int process_mpu_output_to_hid_report(i2c_master_dev_handle_t dev_handle, uint8_t
         // Update HID report's xy values
         if (!gpio_get_level(LEFT_CLICK_GPIO)) {     // Checks if the left click button is pressed
             hid_report[0] = 1;                      // 1 = HID mouse left click pressed
-            x = 0, y = 0;
+            vTaskDelay(300 / portTICK_PERIOD_MS);
         } else {
             hid_report[0] = 0;
         }

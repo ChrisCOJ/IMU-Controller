@@ -27,7 +27,7 @@ bool report_enabled_notifications = false;
 uint16_t hid_handle_table[HID_IDX_NUM];
 
 /* LSB <------------------------------> MSB */
-//first uuid, 16bit, [12],[13] is the value
+// first uuid, 16bit, [12],[13] is the value
 uint8_t HID_SERVICE_UUID[16] = {
     0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
     0x00, 0x10, 0x00, 0x00, 0x12, 0x18, 0x00, 0x00
@@ -284,6 +284,7 @@ void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts
     esp_err_t ret;
 
     switch(event) {
+        
         /* 
         * Set a device name and configure advertising data following successfull application registration.
         * Also create an attribute table for the HID Service.
@@ -515,7 +516,7 @@ esp_err_t bt_init() {
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;  // set the IO capability to No Input No Output. No user involvement ('Just Works')
     esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;  // bonding with peer device after authentication
     uint8_t key_size = 16;
-    uint32_t passkey = 123456;
+    uint32_t passkey = 123456;  // to be hashed
     // Key distribution mask for the initiator: distributes encryption (LTK) and identity (IRK) keys.
     uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     // Key distribution mask for the responder: distributes encryption (LTK) and identity (IRK) keys.

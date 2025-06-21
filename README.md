@@ -1,32 +1,17 @@
-# _Sample project_
+🖱️ MotionPointer — A BLE Air Mouse Powered by ESP32 and MPU6050
+MotionPointer turns an ESP32 and an MPU6050 IMU into a fully functional Bluetooth Low Energy (BLE) HID mouse. By detecting hand motion and translating it into cursor movement and clicks, it enables a seamless air-mouse experience.
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+🚀 Features
 
-This is the simplest buildable example. The example is used by command `idf.py create-project`
-that copies the project to user specified path and set it's name. For more information follow the [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project)
+- BLE HID mouse profile with full GATT service and report descriptors
+- MPU6050-based motion tracking — detects gyroscope and accelerometer movement
+- Motion calibration and filtering for stable cursor control
+- Hardware left-click support via GPIO
+- Built with ESP-IDF using low-level control of I2C, BLE GATT, and HID layers
 
+🧰 Hardware Requirements
 
-
-## How to use example
-We encourage the users to use the example as a template for the new projects.
-A recommended way is to follow the instructions on a [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project).
-
-## Example folder contents
-
-The project **sample_project** contains one source file in C language [main.c](main/main.c). The file is located in folder [main](main).
-
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt`
-files that provide set of directives and instructions describing the project's source files and targets
-(executable, library, or both). 
-
-Below is short explanation of remaining files in the project folder.
-
-```
-├── CMakeLists.txt
-├── main
-│   ├── CMakeLists.txt
-│   └── main.c
-└── README.md                  This is the file you are currently reading
-```
-Additionally, the sample project contains Makefile and component.mk files, used for the legacy Make based build system. 
-They are not used or needed when building with CMake and idf.py.
+- ESP32 development board
+- MPU6050 IMU module (connected via I2C)
+- Tactile button (for left-click), connected to GPIO 23 by default
+- Power source (e.g., USB or battery)
