@@ -1,6 +1,6 @@
 🖱️ **AirNav — A BLE Air Mouse Powered by ESP32 and MPU6050**
 
-MotionPointer turns an ESP32 and an MPU6050 IMU into a fully functional Bluetooth Low Energy (BLE) HID mouse. By detecting hand motion and translating it into cursor movement and clicks, it enables a seamless air-mouse experience.
+AirNav turns an ESP32 and an MPU6050 IMU into a fully functional Bluetooth Low Energy (BLE) HID mouse by detecting hand motion and translating it into cursor movement and clicks.
 
 🚀 Features
 
